@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: process.env.GITHUB_PAGES === 'true' ? '/3dgs-viewer/' : '/',
+  base: '/3dgs-viewer/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
