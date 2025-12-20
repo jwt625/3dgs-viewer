@@ -22,6 +22,7 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
   const controlsRef = useRef<OrbitControls | null>(null);
   const splatMeshRef = useRef<SplatMesh | null>(null);
   const keysPressed = useRef<Set<string>>(new Set());
+  const shiftPressed = useRef<boolean>(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -78,26 +79,34 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       keysPressed.current.add(e.key.toLowerCase());
 
+      // Track Shift key state
+      if (e.key === 'Shift') {
+        shiftPressed.current = true;
+      }
+
       // Scene rotation controls (for debugging/adjusting orientation)
+      // Hold Shift for 5x finer control
       if (splatMeshRef.current) {
         const mesh = splatMeshRef.current;
+        const stepSize = e.shiftKey ? rotationSpeed / 5 : rotationSpeed;
+
         if (e.key === 'ArrowUp') {
-          mesh.rotation.x += rotationSpeed;
+          mesh.rotation.x += stepSize;
           e.preventDefault();
         } else if (e.key === 'ArrowDown') {
-          mesh.rotation.x -= rotationSpeed;
+          mesh.rotation.x -= stepSize;
           e.preventDefault();
         } else if (e.key === 'ArrowLeft') {
-          mesh.rotation.y += rotationSpeed;
+          mesh.rotation.y += stepSize;
           e.preventDefault();
         } else if (e.key === 'ArrowRight') {
-          mesh.rotation.y -= rotationSpeed;
+          mesh.rotation.y -= stepSize;
           e.preventDefault();
         } else if (e.key === '[') {
-          mesh.rotation.z += rotationSpeed;
+          mesh.rotation.z += stepSize;
           e.preventDefault();
         } else if (e.key === ']') {
-          mesh.rotation.z -= rotationSpeed;
+          mesh.rotation.z -= stepSize;
           e.preventDefault();
         }
       }
@@ -105,6 +114,11 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       keysPressed.current.delete(e.key.toLowerCase());
+
+      // Track Shift key state
+      if (e.key === 'Shift') {
+        shiftPressed.current = false;
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -119,6 +133,9 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
         const controls = controlsRef.current;
         const camera = cameraRef.current;
 
+        // Apply 5x smaller steps when Shift is held
+        const currentMoveSpeed = shiftPressed.current ? moveSpeed / 5 : moveSpeed;
+
         // Get camera direction vectors
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
@@ -130,28 +147,28 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
 
         // Apply movement based on keys pressed
         if (keysPressed.current.has('w')) {
-          camera.position.addScaledVector(forward, moveSpeed);
-          controls.target.addScaledVector(forward, moveSpeed);
+          camera.position.addScaledVector(forward, currentMoveSpeed);
+          controls.target.addScaledVector(forward, currentMoveSpeed);
         }
         if (keysPressed.current.has('s')) {
-          camera.position.addScaledVector(forward, -moveSpeed);
-          controls.target.addScaledVector(forward, -moveSpeed);
+          camera.position.addScaledVector(forward, -currentMoveSpeed);
+          controls.target.addScaledVector(forward, -currentMoveSpeed);
         }
         if (keysPressed.current.has('a')) {
-          camera.position.addScaledVector(right, -moveSpeed);
-          controls.target.addScaledVector(right, -moveSpeed);
+          camera.position.addScaledVector(right, -currentMoveSpeed);
+          controls.target.addScaledVector(right, -currentMoveSpeed);
         }
         if (keysPressed.current.has('d')) {
-          camera.position.addScaledVector(right, moveSpeed);
-          controls.target.addScaledVector(right, moveSpeed);
+          camera.position.addScaledVector(right, currentMoveSpeed);
+          controls.target.addScaledVector(right, currentMoveSpeed);
         }
         if (keysPressed.current.has('q')) {
-          camera.position.y -= moveSpeed;
-          controls.target.y -= moveSpeed;
+          camera.position.y -= currentMoveSpeed;
+          controls.target.y -= currentMoveSpeed;
         }
         if (keysPressed.current.has('e')) {
-          camera.position.y += moveSpeed;
-          controls.target.y += moveSpeed;
+          camera.position.y += currentMoveSpeed;
+          controls.target.y += currentMoveSpeed;
         }
 
         controls.update();
@@ -295,6 +312,9 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
         <div>  ↑/↓: Rotate X axis</div>
         <div>  ←/→: Rotate Y axis</div>
         <div>  [/]: Rotate Z axis</div>
+        <div style={{ marginTop: '4px', color: '#888', fontSize: '11px' }}>
+          Hold Shift for 5x finer control
+        </div>
       </div>
 
       {loading && (

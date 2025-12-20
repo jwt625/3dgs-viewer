@@ -23,6 +23,18 @@ function App() {
     }
   }, []);
 
+  // Handle file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      console.log('Loading from local file:', file.name);
+      setSplatUrl(url);
+      setUploadStatus(`Loading ${file.name}...`);
+      setTimeout(() => setUploadStatus(''), 3000);
+    }
+  };
+
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       {/* Fullscreen viewer with overlay */}
@@ -47,8 +59,28 @@ function App() {
         <p style={{ margin: '0 0 10px 0', fontSize: '0.9em', color: '#ccc' }}>
           <strong>Controls:</strong> WASDQE to move, Mouse to rotate
         </p>
-        <p style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#aaa' }}>
-          Load custom files: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 4px', borderRadius: '3px' }}>?url=YOUR_PLY_URL</code>
+        <p style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#aaa', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          Load custom files: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 4px', borderRadius: '3px' }}>?url=YOUR_PLY_URL</code>, or
+          <label style={{
+            background: 'rgba(100, 181, 246, 0.2)',
+            border: '1px solid rgba(100, 181, 246, 0.5)',
+            color: '#64B5F6',
+            padding: '2px 8px',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontSize: '0.8em',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(100, 181, 246, 0.3)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(100, 181, 246, 0.2)'}>
+            Upload
+            <input
+              type="file"
+              accept=".ply"
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+            />
+          </label>
         </p>
         <p style={{ margin: '0', fontSize: '0.75em', color: '#999' }}>
           Built on top of <a href="https://github.com/sparkjsdev/spark" target="_blank" rel="noopener noreferrer" style={{ color: '#64B5F6', textDecoration: 'none' }}>spark</a> by <a href="https://outside5sigma.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#64B5F6', textDecoration: 'none' }}>Wentao</a>
