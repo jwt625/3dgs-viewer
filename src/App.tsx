@@ -3,7 +3,7 @@ import { SplatViewer } from './components/SplatViewer';
 import './App.css';
 
 function App() {
-  const DEFAULT_PLY_URL = 'https://huggingface.co/datasets/jwt625/splat/resolve/main/intel100G_CWDM.ply';
+  const DEFAULT_PLY_URL = 'https://huggingface.co/datasets/jwt625/splat/resolve/main/20250409_innolight_200G.ply';
   const [splatUrl, setSplatUrl] = useState<string>(DEFAULT_PLY_URL);
   const [uploadStatus, setUploadStatus] = useState<string>('');
 
