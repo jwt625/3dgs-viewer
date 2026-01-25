@@ -7,14 +7,29 @@ function App() {
   const [splatUrl, setSplatUrl] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [showLanding, setShowLanding] = useState<boolean>(true);
+  const [loadingInfo, setLoadingInfo] = useState<{ loaded: number; total: number } | null>(null);
+
+  // Handle loading progress
+  const handleLoadProgress = (progress: number, loaded: number, total: number) => {
+    setLoadingInfo({ loaded, total });
+    const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
+    const totalMB = (total / (1024 * 1024)).toFixed(1);
+    setUploadStatus(`Loading: ${loadedMB} MB / ${totalMB} MB`);
+  };
+
+  // Handle loading complete
+  const handleLoadComplete = () => {
+    setUploadStatus('Loading complete!');
+    setLoadingInfo(null);
+    setTimeout(() => setUploadStatus(''), 3000);
+  };
 
   // Handle loading from URL
   const handleLoadUrl = (url: string) => {
     console.log('Loading from URL:', url);
     setSplatUrl(url);
     setShowLanding(false);
-    setUploadStatus('Loading from URL...');
-    setTimeout(() => setUploadStatus(''), 3000);
+    setUploadStatus('Starting download...');
   };
 
   // Handle loading from file
@@ -24,7 +39,6 @@ function App() {
     setSplatUrl(url);
     setShowLanding(false);
     setUploadStatus(`Loading ${file.name}...`);
-    setTimeout(() => setUploadStatus(''), 3000);
   };
 
   // Check for URL parameter on mount
@@ -46,7 +60,11 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       {/* Fullscreen viewer */}
-      <SplatViewer splatUrl={splatUrl || undefined} />
+      <SplatViewer
+        splatUrl={splatUrl || undefined}
+        onLoadProgress={handleLoadProgress}
+        onLoadComplete={handleLoadComplete}
+      />
 
       {/* Top-left overlay with controls */}
       <div style={{

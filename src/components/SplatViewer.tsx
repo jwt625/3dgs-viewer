@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { SplatMesh } from '@sparkjsdev/spark';
+import { SplatMesh, SplatLoader } from '@sparkjsdev/spark';
 
 interface SplatViewerProps {
   splatUrl?: string;
+  onLoadProgress?: (progress: number, loaded: number, total: number) => void;
+  onLoadComplete?: () => void;
 }
 
-export function SplatViewer({ splatUrl }: SplatViewerProps) {
+export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [debugInfo, setDebugInfo] = useState({
     cameraPos: { x: 0, y: 0, z: 0 },
     cameraRot: { x: 0, y: 0, z: 0 },
@@ -239,6 +242,7 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
     console.log('Loading splat from:', splatUrl);
     setLoading(true);
     setError(null);
+    setLoadProgress(0);
 
     // Remove existing splat
     if (splatMeshRef.current) {
@@ -246,32 +250,72 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
       splatMeshRef.current = null;
     }
 
-    try {
-      console.log('Creating SplatMesh...');
-      // Create and add splat mesh - it loads asynchronously in the background
-      const splatMesh = new SplatMesh({ url: splatUrl });
-      splatMesh.position.set(0, 1, 0);  // Raise splat to center it in view
-      splatMesh.scale.set(0.5, 0.5, 0.5); // Scale down to fit better in view
+    // Flag to prevent state updates after unmount
+    let isMounted = true;
 
-      // Apply coordinate system transformation: Z-up (PLY data) to Y-up (THREE.js)
-      // Values determined through user testing for correct orientation
-      splatMesh.rotation.x = 210 * Math.PI / 180;  // 175 degrees
-      splatMesh.rotation.y = 0 * Math.PI / 180;   // -5 degrees
-      splatMesh.rotation.z = 360 * Math.PI / 180;  // 355 degrees
+    // Use SplatLoader to get progress callbacks
+    const loader = new SplatLoader();
 
-      sceneRef.current.add(splatMesh);
-      splatMeshRef.current = splatMesh;
+    loader.load(
+      splatUrl,
+      // onLoad callback
+      (packedSplats) => {
+        if (!isMounted) return; // Prevent state updates if unmounted
 
-      console.log('SplatMesh added to scene, loading in background...');
+        try {
+          console.log('Splat loaded, creating mesh...');
 
-      // Hide loading indicator after a short delay
-      // The splat will continue loading and appear when ready
-      setTimeout(() => setLoading(false), 3000);
-    } catch (err) {
-      console.error('Error creating splat:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create splat');
-      setLoading(false);
-    }
+          // Create mesh from loaded data
+          const splatMesh = new SplatMesh({ packedSplats });
+          splatMesh.position.set(0, 1, 0);  // Raise splat to center it in view
+          splatMesh.scale.set(0.5, 0.5, 0.5); // Scale down to fit better in view
+
+          // Apply coordinate system transformation: Z-up (PLY data) to Y-up (THREE.js)
+          // Values determined through user testing for correct orientation
+          splatMesh.rotation.x = 210 * Math.PI / 180;  // 210 degrees
+          splatMesh.rotation.y = 0 * Math.PI / 180;   // 0 degrees
+          splatMesh.rotation.z = 360 * Math.PI / 180;  // 360 degrees
+
+          if (sceneRef.current) {
+            sceneRef.current.add(splatMesh);
+            splatMeshRef.current = splatMesh;
+          }
+
+          console.log('SplatMesh added to scene');
+          setLoading(false);
+          setLoadProgress(100);
+          onLoadComplete?.();
+        } catch (err) {
+          console.error('Error creating splat mesh:', err);
+          setError(err instanceof Error ? err.message : 'Failed to create splat mesh');
+          setLoading(false);
+        }
+      },
+      // onProgress callback
+      (event) => {
+        if (!isMounted) return; // Prevent state updates if unmounted
+
+        if (event.lengthComputable) {
+          const progress = (event.loaded / event.total) * 100;
+          console.log(`Loading progress: ${progress.toFixed(1)}%`);
+          setLoadProgress(progress);
+          onLoadProgress?.(progress, event.loaded, event.total);
+        }
+      },
+      // onError callback
+      (err) => {
+        if (!isMounted) return; // Prevent state updates if unmounted
+
+        console.error('Error loading splat:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load splat');
+        setLoading(false);
+      }
+    );
+
+    // Cleanup function
+    return () => {
+      isMounted = false; // Prevent any further state updates from this load
+    };
   }, [splatUrl]);
 
   return (
@@ -323,12 +367,43 @@ export function SplatViewer({ splatUrl }: SplatViewerProps) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'rgba(0, 0, 0, 0.85)',
           color: 'white',
-          padding: '20px',
-          borderRadius: '8px',
+          padding: '30px 40px',
+          borderRadius: '12px',
+          minWidth: '300px',
+          backdropFilter: 'blur(10px)',
         }}>
-          Loading splat...
+          <div style={{ marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
+            Loading splat...
+          </div>
+
+          {/* Progress bar */}
+          <div style={{
+            width: '100%',
+            height: '8px',
+            background: 'rgba(255, 255, 255, 0.2)',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            marginBottom: '10px',
+          }}>
+            <div style={{
+              width: `${loadProgress}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, #4CAF50, #8BC34A)',
+              transition: 'width 0.3s ease',
+              borderRadius: '4px',
+            }} />
+          </div>
+
+          {/* Progress percentage */}
+          <div style={{
+            fontSize: '14px',
+            color: '#aaa',
+            textAlign: 'center',
+          }}>
+            {loadProgress.toFixed(1)}%
+          </div>
         </div>
       )}
 
