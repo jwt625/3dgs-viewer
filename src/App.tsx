@@ -7,11 +7,9 @@ function App() {
   const [splatUrl, setSplatUrl] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [showLanding, setShowLanding] = useState<boolean>(true);
-  const [loadingInfo, setLoadingInfo] = useState<{ loaded: number; total: number } | null>(null);
 
   // Handle loading progress
-  const handleLoadProgress = (progress: number, loaded: number, total: number) => {
-    setLoadingInfo({ loaded, total });
+  const handleLoadProgress = (_progress: number, loaded: number, total: number) => {
     const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
     const totalMB = (total / (1024 * 1024)).toFixed(1);
     setUploadStatus(`Loading: ${loadedMB} MB / ${totalMB} MB`);
@@ -20,7 +18,6 @@ function App() {
   // Handle loading complete
   const handleLoadComplete = () => {
     setUploadStatus('Loading complete!');
-    setLoadingInfo(null);
     setTimeout(() => setUploadStatus(''), 3000);
   };
 
