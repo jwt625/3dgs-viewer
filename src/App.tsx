@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { SplatViewer } from './components/SplatViewer';
 import { LandingPage } from './components/LandingPage';
+import { detectFormat, type ModelFormat } from './modelFormat';
 import './App.css';
 
 function App() {
   const [splatUrl, setSplatUrl] = useState<string | null>(null);
+  const [format, setFormat] = useState<ModelFormat>('ply');
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [showLanding, setShowLanding] = useState<boolean>(true);
 
@@ -24,6 +26,7 @@ function App() {
   // Handle loading from URL
   const handleLoadUrl = (url: string) => {
     console.log('Loading from URL:', url);
+    setFormat(detectFormat(url));
     setSplatUrl(url);
     setShowLanding(false);
     setUploadStatus('Starting download...');
@@ -33,6 +36,8 @@ function App() {
   const handleLoadFile = (file: File) => {
     const url = URL.createObjectURL(file);
     console.log('Loading from local file:', file.name);
+    // Blob URLs carry no extension, so detect format from the file name
+    setFormat(detectFormat(file.name));
     setSplatUrl(url);
     setShowLanding(false);
     setUploadStatus(`Loading ${file.name}...`);
@@ -59,6 +64,7 @@ function App() {
       {/* Fullscreen viewer */}
       <SplatViewer
         splatUrl={splatUrl || undefined}
+        format={format}
         onLoadProgress={handleLoadProgress}
         onLoadComplete={handleLoadComplete}
       />

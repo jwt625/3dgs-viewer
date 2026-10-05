@@ -1,15 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { SplatMesh, SplatLoader } from '@sparkjsdev/spark';
+import type { ModelFormat } from '../modelFormat';
+
+// Draco decoder is fetched from CDN only when a Draco-compressed glTF is loaded
+const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
+
+// Free GPU resources held by a loaded glTF scene
+function disposeObject(root: THREE.Object3D) {
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry?.dispose();
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of materials) {
+      if (!mat) continue;
+      for (const value of Object.values(mat)) {
+        if (value instanceof THREE.Texture) value.dispose();
+      }
+      mat.dispose();
+    }
+  });
+}
 
 interface SplatViewerProps {
   splatUrl?: string;
+  format?: ModelFormat;
   onLoadProgress?: (progress: number, loaded: number, total: number) => void;
   onLoadComplete?: () => void;
 }
 
-export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatViewerProps) {
+export function SplatViewer({ splatUrl, format = 'ply', onLoadProgress, onLoadComplete }: SplatViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +49,9 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const splatMeshRef = useRef<SplatMesh | null>(null);
+  // Currently loaded model: SplatMesh for PLY, pivot group for GLB
+  const modelRef = useRef<THREE.Object3D | null>(null);
+  const envMapRef = useRef<THREE.Texture | null>(null);
   const keysPressed = useRef<Set<string>>(new Set());
   const shiftPressed = useRef<boolean>(false);
 
@@ -65,6 +93,13 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Environment map for PBR lighting of GLB models (splats ignore it)
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const roomEnv = new RoomEnvironment();
+    envMapRef.current = pmrem.fromScene(roomEnv, 0.04).texture;
+    roomEnv.dispose();
+    pmrem.dispose();
+
     // Add orbit controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -89,8 +124,8 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
 
       // Scene rotation controls (for debugging/adjusting orientation)
       // Hold Shift for 5x finer control
-      if (splatMeshRef.current) {
-        const mesh = splatMeshRef.current;
+      if (modelRef.current) {
+        const mesh = modelRef.current;
         const stepSize = e.shiftKey ? rotationSpeed / 5 : rotationSpeed;
 
         if (e.key === 'ArrowUp') {
@@ -189,10 +224,10 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
           y: Math.round((camera.rotation.y * 180 / Math.PI) * 100) / 100,
           z: Math.round((camera.rotation.z * 180 / Math.PI) * 100) / 100,
         },
-        sceneRot: splatMeshRef.current ? {
-          x: Math.round((splatMeshRef.current.rotation.x * 180 / Math.PI) * 100) / 100,
-          y: Math.round((splatMeshRef.current.rotation.y * 180 / Math.PI) * 100) / 100,
-          z: Math.round((splatMeshRef.current.rotation.z * 180 / Math.PI) * 100) / 100,
+        sceneRot: modelRef.current ? {
+          x: Math.round((modelRef.current.rotation.x * 180 / Math.PI) * 100) / 100,
+          y: Math.round((modelRef.current.rotation.y * 180 / Math.PI) * 100) / 100,
+          z: Math.round((modelRef.current.rotation.z * 180 / Math.PI) * 100) / 100,
         } : { x: 0, y: 0, z: 0 },
       });
 
@@ -224,9 +259,14 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
         controlsRef.current.dispose();
       }
 
-      if (splatMeshRef.current) {
-        scene.remove(splatMeshRef.current);
+      if (modelRef.current) {
+        scene.remove(modelRef.current);
+        if (!(modelRef.current instanceof SplatMesh)) disposeObject(modelRef.current);
+        modelRef.current = null;
       }
+
+      envMapRef.current?.dispose();
+      envMapRef.current = null;
 
       if (renderer) {
         renderer.dispose();
@@ -235,23 +275,106 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
     };
   }, []);
 
-  // Load splat when URL changes
+  // Load model when URL or format changes
   useEffect(() => {
     if (!splatUrl || !sceneRef.current) return;
 
-    console.log('Loading splat from:', splatUrl);
+    console.log(`Loading ${format} from:`, splatUrl);
     setLoading(true);
     setError(null);
     setLoadProgress(0);
 
-    // Remove existing splat
-    if (splatMeshRef.current) {
-      sceneRef.current.remove(splatMeshRef.current);
-      splatMeshRef.current = null;
+    // Remove existing model
+    if (modelRef.current) {
+      sceneRef.current.remove(modelRef.current);
+      if (!(modelRef.current instanceof SplatMesh)) disposeObject(modelRef.current);
+      modelRef.current = null;
     }
+    sceneRef.current.environment = null;
 
     // Flag to prevent state updates after unmount
     let isMounted = true;
+
+    const handleProgress = (event: ProgressEvent) => {
+      if (!isMounted) return; // Prevent state updates if unmounted
+
+      if (event.lengthComputable) {
+        const progress = (event.loaded / event.total) * 100;
+        console.log(`Loading progress: ${progress.toFixed(1)}%`);
+        setLoadProgress(progress);
+        onLoadProgress?.(progress, event.loaded, event.total);
+      }
+    };
+
+    const handleError = (err: unknown) => {
+      if (!isMounted) return; // Prevent state updates if unmounted
+
+      console.error(`Error loading ${format}:`, err);
+      setError(err instanceof Error ? err.message : `Failed to load ${format}`);
+      setLoading(false);
+    };
+
+    if (format === 'glb') {
+      const dracoLoader = new DRACOLoader();
+      dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
+      const gltfLoader = new GLTFLoader();
+      gltfLoader.setDRACOLoader(dracoLoader);
+      gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+      gltfLoader.load(
+        splatUrl,
+        (gltf) => {
+          dracoLoader.dispose();
+          if (!isMounted) {
+            disposeObject(gltf.scene);
+            return;
+          }
+
+          try {
+            const model = gltf.scene;
+
+            // Center on bounding box and scale to max dimension 1 so the model
+            // frames like the splats; glTF is Y-up so no base rotation needed
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = maxDim > 0 && Number.isFinite(maxDim) ? 1 / maxDim : 1;
+            model.position.copy(center).multiplyScalar(-scale);
+            model.scale.setScalar(scale);
+
+            // Pivot group so arrow-key rotation turns the model about its center
+            const pivot = new THREE.Group();
+            pivot.add(model);
+            pivot.position.set(0, 1, 0);
+
+            if (sceneRef.current) {
+              sceneRef.current.environment = envMapRef.current;
+              sceneRef.current.add(pivot);
+              modelRef.current = pivot;
+            }
+
+            console.log('GLB added to scene');
+            setLoading(false);
+            setLoadProgress(100);
+            onLoadComplete?.();
+          } catch (err) {
+            console.error('Error setting up GLB:', err);
+            setError(err instanceof Error ? err.message : 'Failed to set up GLB');
+            setLoading(false);
+          }
+        },
+        handleProgress,
+        (err) => {
+          dracoLoader.dispose();
+          handleError(err);
+        }
+      );
+
+      return () => {
+        isMounted = false;
+      };
+    }
 
     // Use SplatLoader to get progress callbacks
     const loader = new SplatLoader();
@@ -278,7 +401,7 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
 
           if (sceneRef.current) {
             sceneRef.current.add(splatMesh);
-            splatMeshRef.current = splatMesh;
+            modelRef.current = splatMesh;
           }
 
           console.log('SplatMesh added to scene');
@@ -292,31 +415,16 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
         }
       },
       // onProgress callback
-      (event) => {
-        if (!isMounted) return; // Prevent state updates if unmounted
-
-        if (event.lengthComputable) {
-          const progress = (event.loaded / event.total) * 100;
-          console.log(`Loading progress: ${progress.toFixed(1)}%`);
-          setLoadProgress(progress);
-          onLoadProgress?.(progress, event.loaded, event.total);
-        }
-      },
+      handleProgress,
       // onError callback
-      (err) => {
-        if (!isMounted) return; // Prevent state updates if unmounted
-
-        console.error('Error loading splat:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load splat');
-        setLoading(false);
-      }
+      handleError
     );
 
     // Cleanup function
     return () => {
       isMounted = false; // Prevent any further state updates from this load
     };
-  }, [splatUrl]);
+  }, [splatUrl, format]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -375,7 +483,7 @@ export function SplatViewer({ splatUrl, onLoadProgress, onLoadComplete }: SplatV
           backdropFilter: 'blur(10px)',
         }}>
           <div style={{ marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
-            Loading splat...
+            {format === 'glb' ? 'Loading GLB...' : 'Loading splat...'}
           </div>
 
           {/* Progress bar */}

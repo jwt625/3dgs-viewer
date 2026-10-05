@@ -215,7 +215,7 @@ export function LandingPage({ onLoadUrl, onLoadFile }: LandingPageProps) {
               type="text"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="Paste PLY file URL here..."
+              placeholder="Paste PLY or GLB file URL here..."
               className="url-input"
             />
             <button type="submit" className="url-submit-btn" disabled={!urlInput.trim()}>
@@ -236,7 +236,7 @@ export function LandingPage({ onLoadUrl, onLoadFile }: LandingPageProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".ply"
+              accept=".ply,.glb"
               onChange={handleFileInput}
               style={{ display: 'none' }}
             />
@@ -248,8 +248,8 @@ export function LandingPage({ onLoadUrl, onLoadFile }: LandingPageProps) {
                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
               />
             </svg>
-            <p className="upload-text">Drop PLY file here or click to browse</p>
-            <p className="upload-hint">Supports .ply files up to 500MB</p>
+            <p className="upload-text">Drop PLY or GLB file here or click to browse</p>
+            <p className="upload-hint">Supports .ply and .glb files up to 500MB</p>
           </div>
         </section>
 

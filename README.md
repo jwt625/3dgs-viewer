@@ -6,6 +6,7 @@ Interactive web-based viewer for 3D Gaussian Splatting (3DGS) models with suppor
 
 - **High-fidelity rendering** using Spark (Three.js-based) with SH3 support
 - **File upload interface** with drag-and-drop for PLY files
+- **GLB (glTF binary) models** by URL or upload, with the same controls (Draco and Meshopt compression supported)
 - **Automatic format conversion** to SOG when `@playcanvas/splat-transform` is available
 - **Interactive controls:**
   - Mouse: OrbitControls for camera manipulation
